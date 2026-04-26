@@ -233,6 +233,7 @@ Se utiliza el **modo de conexión embebida de Beeline** (`jdbc:hive2://` sin hos
 killall -9 java
 /usr/local/hadoop/sbin/start-dfs.sh
 /usr/local/hadoop/sbin/start-yarn.sh # Motor de procesamiento de Big Data (Obligatorio)
+```
 
 ---
 
