@@ -42,22 +42,55 @@ Para mantener el orden de ingeniería, el proyecto sigue esta jerarquía de dire
 ---
 
 ## 3. Requisitos de Infraestructura y Software
-*   **Sistema Operativo**: Ubuntu 24.04 en WSL2.
-*   **Python**: Versión 3.12 (Nota: Aunque la guía sugiere 3.10, se escaló a 3.12 para garantizar una mejor compatibilidad con las versiones más recientes de YOLOv8 y OpenCV dentro del entorno WSL2).
-*   **Servicios Big Data**: Apache HDFS (Namenode/Datanode) y Apache Hive (Metastore/HiveServer2) activos. 
 
----
+### 3.1 Requisitos de Software
+*   **Sistema Operativo**: Ubuntu 24.04 en WSL2.
+*   **Python**: Versión 3.12 (Se escaló para mejor compatibilidad con YOLOv8 en WSL2).
+*   **Servicios Big Data**: Apache HDFS y Apache Hive (Metastore/HiveServer2).
+
+### 3.2 Verificación de Requisitos (Comandos Linux)
+Ejecute estos comandos para demostrar que el entorno está correctamente configurado:
+```bash
+# 1. Verificar Hadoop (Big Data Core)
+hadoop version
+
+# 2. Verificar Hive (Data Warehouse)
+hive --version
+
+# 3. Verificar Python (Motor de IA)
+python3 --version
+
+# 4. Verificar Java (El "corazón" de Hadoop/Hive)
+java -version
+
+# 5. Verificar que los servicios están CORRIENDO
+jps
+```
 
 ## 4. Guía de Arranque de Infraestructura (Paso a Paso)
 
-### 4.0 Protocolo de Limpieza (Paso 0)
-Antes de iniciar, limpie procesos previos:
+### 4.0 Protocolo de Limpieza y Apagado (Paso 0)
+Para garantizar una demostración impecable, siga este orden (los servicios deben estar encendidos para limpiar el clúster):
+
+**1. Limpieza de Datos (Con servicios activos):**
+```bash
+# Limpieza Local
+cd ~/final_project_ai/codigo && make clean
+
+# Purga de Clúster (HDFS y Hive)
+/usr/local/hadoop/bin/hdfs dfs -rm -r -f /user/user/final_project/detections/*
+/usr/local/hadoop/bin/hdfs dfs -rm -r -f /user/hive/warehouse/ai_data_db.db/detections/*
+beeline -u jdbc:hive2:// -n user -e "TRUNCATE TABLE ai_data_db.detections;"
+```
+
+**2. Apagado Seguro y Liberación de Recursos:**
 ```bash
 /usr/local/hadoop/sbin/stop-yarn.sh
 /usr/local/hadoop/sbin/stop-dfs.sh
+pkill -f HiveMetaStore
 killall -9 java
+# Eliminar bloqueos de base de datos
 find /home/user -name "*.lck" -delete
-unset HADOOP_OPTS
 ```
 
 ### 4.1 Encendido de Servicios
@@ -83,8 +116,8 @@ cd ~/final_project_ai/codigo
 
 ### Escenario A: Entrega Final / Reinicio Total (Recomendado para Sustentación)
 Utilice este comando si desea limpiar todo el historial de staging y ejecutar el pipeline desde cero para demostrar el flujo completo.
-*   **Comando**: `make clean && make all`
-*   **Efecto**: Borra archivos temporales, procesa el dataset y carga la data limpia a Hive.
+*   **Comando**: `make all`
+*   **Efecto**: Procesa el dataset y carga la data limpia a Hive.
 
 ### Escenario B: Modo Producción (Escalabilidad / Agregar Nuevos Datos)
 Utilice esta lógica si ya tiene datos en Hive y desea **agregar nuevas imágenes o videos** a la carpeta `data/raw/` sin borrar lo que ya existe.
@@ -99,12 +132,6 @@ Si desea ejecutar cada fase del Makefile de forma individual:
 4.  **`make classify`**: Inferencia de IA.
 5.  **`make etl`**: Procesamiento Batch y carga a Hive.
 
-### 4.1 Apagado Seguro de Servicios
-Para garantizar la integridad de los metadatos y los bloques en HDFS, se recomienda cerrar los servicios de la siguiente manera:
-1.  **Detener Hadoop**: `/usr/local/hadoop/sbin/stop-dfs.sh`
-2.  **Detener Hive Metastore**: `pkill -f HiveMetaStore`
-3.  **Detener SSH (Opcional)**: `sudo service ssh stop`
-
 ---
 
 ## 5. Lógica de Ingeniería y Valor Agregado
@@ -114,7 +141,7 @@ El sistema emplea un mecanismo de sincronización de dos niveles:
 *   **Detection ID Único**: Filtrado en el DataFrame de Python antes de la carga a Hive.
 *   **Mecanismo de Checkpoints**: Los archivos CSV procesados se mueven de `staging/` a `processed/`, garantizando que cada registro entre al clúster una sola vez.
 
-### 5.2 Innovaciones del Autor
+### 5.2 Aportes
 *   **Configuración Desacoplada (`config.env`)**: Parametrización dinámica del modelo y umbrales sin modificar código.
 *   **Orquestación End-to-End**: Se extendió el Makefile base para gestionar el flujo completo de datos.
 
@@ -127,42 +154,32 @@ El sistema emplea un mecanismo de sincronización de dos niveles:
 
 ---
 
-## 7. Guía de Validación Analítica (Consultas en Hive)
-Ejecute estas consultas para validar la persistencia exitosa de la data:
-
-**A. Conteo General de Objetos por Clase**
-```sql
-SELECT label, COUNT(*) as total FROM ai_data_db.detections GROUP BY label ORDER BY total DESC;
-```
-
-**B. Análisis de Personas por Fuente**
-```sql
--- Nota: La etiqueta generada por la IA es 'person' en minúsculas
-SELECT source_id, COUNT(*) as total FROM ai_data_db.detections WHERE label = 'person' GROUP BY source_id;
-```
-
-**C. Validación de Ventanas Temporales de 10s**
-```sql
-SELECT source_id, FLOOR(timestamp_sec / 10) as lote, COUNT(*) as total FROM ai_data_db.detections WHERE source_type = 'video' GROUP BY source_id, FLOOR(timestamp_sec / 10);
-```
-
 ---
 
-## 8. Guía de Validación Analítica para Sustentación (Paso a Paso)
+## 7. Guía de Validación Analítica para Sustentación (Paso a Paso)
 
 Esta sección documenta el procedimiento oficial para demostrar los resultados del pipeline ETL.
 
-### Paso 1: Confirmar datos en HDFS
+### Paso 1: Confirmar datos en el Warehouse de Hadoop (HDFS)
 ```bash
-/usr/local/hadoop/bin/hdfs dfs -ls /user/user/final_project/detections/
+/usr/local/hadoop/bin/hdfs dfs -ls /user/hive/warehouse/ai_data_db.db/detections/
 ```
-> Debe mostrar la lista de archivos `.csv` cargados por el ETL.
+> Nota: Apache Hive gestiona el ciclo de vida del dato moviendo los archivos procesados a su Warehouse interno.
+
+### Paso 1.1: Verificar estructura de la tabla (28 Atributos)
+Demuestre el esquema técnico diseñado para la analítica:
+```bash
+beeline -u jdbc:hive2:// -n user -e "DESCRIBE ai_data_db.detections;"
+```
+
+### Paso 1.2: Vista Previa de Datos (Primeros 10 registros)
+Muestre la data real ya procesada en el clúster:
+```bash
+beeline -u jdbc:hive2:// -n user -e "SELECT label, confidence, dominant_color_name, ingestion_date FROM ai_data_db.detections LIMIT 10;"
+```
 
 ### Paso 2: Ejecutar consultas analíticas vía Beeline
-Debido a una limitación conocida del entorno (ver Sección 9), las consultas se ejecutan con el siguiente comando unificado:
-```bash
-beeline -u jdbc:hive2:// -n user -e "USE ai_data_db; SELECT label, COUNT(*) as total FROM detections GROUP BY label ORDER BY total DESC;"
-```
+Debido a una limitación conocida del entorno, todas las consultas deben ejecutarse utilizando el modo embebido de Beeline. A continuación, se presentan las consultas analíticas obligatorias.
 
 ### Paso 3: Las 5 Consultas Obligatorias de la Rúbrica
 
@@ -193,7 +210,9 @@ beeline -u jdbc:hive2:// -n user -e "SELECT COUNT(*) as total_registros, COUNT(D
 
 ---
 
-## 9. Nota Técnica: HiveServer2 en WSL2 (Comportamiento Documentado)
+---
+
+## 8. Nota Técnica: HiveServer2 en WSL2 (Comportamiento Documentado)
 
 ### 9.1 Bloqueo del Puerto TCP 10000
 En entornos WSL2 con **Hadoop 3.4.2** y **Hive 4.0.1**, el servicio `HiveServer2` puede iniciar correctamente (generando *Hive Session ID*) pero **no llegar a abrir el puerto TCP 10000** para conexiones externas. Este comportamiento se manifiesta como:
@@ -215,12 +234,9 @@ killall -9 java
 /usr/local/hadoop/sbin/start-dfs.sh
 /usr/local/hadoop/sbin/start-yarn.sh # Motor de procesamiento de Big Data (Obligatorio)
 
-# Ejecutar consulta directamente
-beeline -u jdbc:hive2:// -n user -e "SELECT label, COUNT(*) FROM ai_data_db.detections GROUP BY label;"
-
 ---
 
-## 10. Material de Sustentación y Entregables
+## 9. Material de Sustentación y Entregables
 *   **Video Explicativo**: [Enlace aquí]
 *   **Dataset Propio**: 20 imágenes y 2 videos capturados por el autor en `data/raw/`.
 *   **Guía Base**: `GUIA_PROYECTO_FINAL_ES.md` adjunta en la raíz.
