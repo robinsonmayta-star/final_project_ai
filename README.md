@@ -237,7 +237,7 @@ killall -9 java
 ---
 
 ## 9. Material de Sustentación y Entregables
-*   **Video Explicativo**: [Enlace aquí]
+*   **Video Explicativo**: [Ver Video de Sustentación (Google Drive)](https://drive.google.com/file/d/1foqGMxQxwWMu1RZgINQVRM5vQyIoqwis/view?usp=drive_link)
 *   **Dataset Propio**: 20 imágenes y 2 videos capturados por el autor en `data/raw/`.
 *   **Guía Base**: `GUIA_PROYECTO_FINAL_ES.md` adjunta en la raíz.
 
