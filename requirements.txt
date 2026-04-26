@@ -1,0 +1,18 @@
+# Requisitos del Proyecto Final - AI Data Engineer
+numpy
+pandas
+matplotlib
+opencv-python
+ultralytics
+Pillow
+requests
+tqdm
+pytest
+black
+pylint
+pyarrow
+fastparquet
+schedule
+pyhive
+thrift
+thrift_sasl

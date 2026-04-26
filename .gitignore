@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv/
+*.pt
+data/staging/
+data/raw/
+logs/
+metastore_db/
+*.lck
+derby.log
